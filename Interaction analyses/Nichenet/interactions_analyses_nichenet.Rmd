@@ -1,0 +1,312 @@
+---
+title: "Interactions analyses with Nichenet"
+author: "Matei Teleman"
+date: "11/3/2021"
+output: html_document
+---
+
+## Import libraries
+```{r}
+library(dplyr)
+library(nichenetr)
+library(Seurat)
+library(tidyverse)
+library(circlize)
+library(scales)
+```
+
+## Preparing for the data for the Nichenet analyses
+### Import Nichenet's datasets
+```{r}
+ligand_target_matrix = readRDS(url("https://zenodo.org/record/3260758/files/ligand_target_matrix.rds"))
+ligand_target_matrix[1:5,1:5] # target genes in rows, ligands in columns
+
+lr_network = readRDS(url("https://zenodo.org/record/3260758/files/lr_network.rds"))
+head(lr_network)
+
+weighted_networks = readRDS(url("https://zenodo.org/record/3260758/files/weighted_networks.rds"))
+head(weighted_networks$lr_sig) # interactions and their weights in the ligand-receptor + signaling network
+
+
+head(weighted_networks$gr) # interactions and their weights in the gene regulatory network
+```
+
+### Importation of .RDS file of meningeal dataset after QC and demultiplexing and annotation of the clusters
+```{r}
+so <- readRDS("/mnt/DOSI/PLATEFORMES/BIOINFORMATIQUE/03_WORKSPACE/teleman/ciml-rrlab/Project/TotalMeningeLPS/202010028_R333_RR/01_Input/Seurat objects/TotalMeningeLPS_202010028_R333_RR_sc10x.rna.seurat_50PCA.RDS")
+DimPlot(so,label = T,reduction = "umap1")
+new.cluster.ids <- c("Stromal", "Stromal", "Stromal","Stromal","Stromal","Stromal","B cell","Macrophages","Endothelium"
+                     , "Neutrophils Monocytes", "Mast cell","Activated Macrophages", "NK","Stromal",
+                     "ILC2","DC/pDC", "Osteoblasts", "Endothelium","Schwann","B cell", "MigDC","NK","Neuron","Unknown",
+                     "Stromal","Neutrophils Monocytes","Smooth muscle","Lymphatics","B cell")
+names(new.cluster.ids) <- levels(so)
+so <- RenameIdents(so, new.cluster.ids)
+DimPlot(so,label = T,reduction = "umap1")
+```
+
+### Sub-setting of the macrophages clusters
+With the obtained clustering, we assign clusters :
+  - 0 : MM CD206+ MHCII- PBS
+  - 1 : MM CD206+ MHCII+ PBS
+  - 2 : MM CD206+ MHCII+ LPS
+  - 3 : MM CD206+ MHCII- LPS
+  
+```{r}
+sbmacs <- subset(so, idents = c("Macrophages","Activated Macrophages"))
+sbmacs <- SetIdent(sbmacs, value = sbmacs[["MULTI_Sample"]])
+sbmacs <- FindNeighbors(sbmacs, dims = 1:50)
+sbmacs <- FindClusters(sbmacs, resolution = 0.3,method = 1)
+sbmacs <- RenameIdents(sbmacs,"0" = "MM CD206 + MHCII-","1" = "MM CD206+ MHCII+","2" = "MM CD206+ MHCII+","3" = "MM CD206+ MHCII-")
+DimPlot(sbmacs,reduction = "umap1")
+```
+
+
+### Removing the two macrophages cluster from the original dataset befor merging them with the new annotations
+```{r}
+so.without.macs <- subset(so, idents = unique(c("Stromal", "Stromal", "Stromal","Stromal","Stromal","Stromal","B cell","Endothelium"
+                     , "Neutrophils Monocytes", "Mast cell", "NK","Stromal",
+                     "ILC2","DC/pDC", "Osteoblasts", "Endothelium","Schwann","B cell", "MigDC","NK","Neuron","Unknown",
+                     "Stromal","Neutrophils Monocytes","Smooth muscle","Lymphatics","B cell")))
+so.v2 <- merge(so.without.macs,sbmacs,merge.data = T,merge.dr = "umap1")
+DimPlot(so.v2)
+```
+
+## Nichenet analyses
+We  want to see the ligands expressed by the two populations of MM CD206+ involved in interactions upregulated in LPS with the other cell populations in the meninges.
+```{r}
+sender_celltypes <- c("MM CD206+ MHCII-","MM CD206+ MHCII+")
+nichenet_output = nichenet_seuratobj_aggregate(
+  seurat_obj = so.v2, 
+  receiver = unique(c("Stromal", "Stromal", "Stromal","Stromal","Stromal","Stromal","B cell","Endothelium"
+                     , "Neutrophils Monocytes", "Mast cell", "NK","Stromal",
+                     "ILC2","DC/pDC", "Osteoblasts", "Endothelium","Schwann","B cell", "MigDC","NK","Neuron","Unknown",
+                     "Stromal","Neutrophils Monocytes","Smooth muscle","Lymphatics","B cell")),
+  condition_colname = "MULTI_Sample", condition_oi = "LPS", condition_reference = "NI", 
+  sender = sender_celltypes, 
+  ligand_target_matrix = ligand_target_matrix, lr_network = lr_network, weighted_networks = weighted_networks, organism = "mouse")
+```
+
+## Visualizing Nichenet output results
+### Creating two new subsets of the macrophages by the study conditions (LPS and PBS)
+```{r}
+sbmacs.lps <- subset(sbmacs, subset = MULTI_Sample == "LPS")
+DimPlot(sbmacs.lps,reduction = "umap1")
+
+sbmacs.pbs <- subset(sbmacs, subset = MULTI_Sample == "NI")
+DimPlot(sbmacs.pbs,reduction = "umap1")
+```
+
+### Ploting the average expression and the % of cell expressing the top ligands predicted by Nichenet
+```{r}
+DotPlot(sbmacs.lps, features = nichenet_output$top_ligands %>% rev(), cols = "RdYlBu") + RotatedAxis()
+DotPlot(sbmacs.pbs, features = nichenet_output$top_ligands %>% rev(), cols = "RdYlBu") + RotatedAxis()
+```
+
+### Building a chord diagram for top ligands
+This part is an adaptation of Nichenet's tutorial for Chord Diagram visualization : "https://github.com/saeyslab/nichenetr/blob/master/vignettes/seurat_wrapper_circos.md".
+The only "difference" is on what we consider as the "general ligands". Indeed, several "top ligands" are very expressed in other type of cells so they will not appear in the Chord Diagram by keeping the line of code of the vignette. So first, we consider the "general ligands" as an empty vector before computing the ligands specific of the two populations of MM and after that we compute the "general ligands" like the vignette does. 
+```{r}
+avg_expression_ligands = AverageExpression(so.v2 %>% subset(subset = MULTI_Sample == "LPS"),features = nichenet_output$top_ligands) # if want to look specifically in LPS-only cells
+#avg_expression_ligands = AverageExpression(so.v2, features = nichenet_output$top_ligands)
+
+```
+
+```{r}
+sender_ligand_assignment = avg_expression_ligands$RNA %>% apply(1, function(ligand_expression){
+  ligand_expression > (ligand_expression %>% mean() + ligand_expression %>% sd())
+  }) %>% t()
+sender_ligand_assignment = sender_ligand_assignment %>% apply(2, function(x){x[x == TRUE]}) %>% purrr::keep(function(x){length(x) > 0})
+names(sender_ligand_assignment)
+```
+
+
+```{r}
+all_assigned_ligands = sender_ligand_assignment %>% lapply(function(x){names(x)}) %>% unlist()
+unique_ligands = all_assigned_ligands %>% table() %>% .[. == 1] %>% names()
+general_ligands = c()
+
+
+MM_MHCIIneg_specific_ligands = sender_ligand_assignment$`MM MHCII-` %>% names() %>% setdiff(general_ligands)
+MM_MHCIIpos_specific_ligands = sender_ligand_assignment$`MM MHCII+` %>% names() %>% setdiff(general_ligands)
+general_ligands = nichenet_output$top_ligands 
+ligand_type_indication_df = tibble(
+  ligand_type = c(rep("MM MHCII(-)-specific", times = MM_MHCIIneg_specific_ligands %>% length()),
+                  rep("MM MHCII(+)-specific", times = MM_MHCIIpos_specific_ligands %>% length())
+                  ,rep("General", times = general_ligands%>% length())
+                  ),
+  ligand = c(MM_MHCIIneg_specific_ligands,
+             MM_MHCIIpos_specific_ligands
+             ,general_ligands
+             ))
+
+```
+
+#### Chord diagram of ligands and their target genes
+```{r}
+active_ligand_target_links_df = nichenet_output$ligand_target_df %>% mutate(target_type = "LPS-DE") %>% inner_join(ligand_type_indication_df) # if you want to make circos plots for multiple gene sets, combine the different data frames and differentiate which target belongs to which gene set via the target type
+
+cutoff_include_all_ligands = active_ligand_target_links_df$weight %>% quantile(0.40)
+
+active_ligand_target_links_df_circos = active_ligand_target_links_df %>% filter(weight > cutoff_include_all_ligands)
+
+ligands_to_remove = setdiff(active_ligand_target_links_df$ligand %>% unique(), active_ligand_target_links_df_circos$ligand %>% unique())
+targets_to_remove = setdiff(active_ligand_target_links_df$target %>% unique(), active_ligand_target_links_df_circos$target %>% unique())
+  
+circos_links = active_ligand_target_links_df %>% filter(!target %in% targets_to_remove &!ligand %in% ligands_to_remove)
+
+```
+
+
+```{r}
+grid_col_ligand =c("General" = "lawngreen",
+            "MM MHCII(-)-specific" = "darkgreen"
+            ,"MM MHCII(+)-specific" = "violet"
+            )
+grid_col_target =c(
+            "LPS-DE" = "tomato")
+
+grid_col_tbl_ligand = tibble(ligand_type = grid_col_ligand %>% names(), color_ligand_type = grid_col_ligand)
+grid_col_tbl_target = tibble(target_type = grid_col_target %>% names(), color_target_type = grid_col_target)
+
+circos_links = circos_links %>% mutate(ligand = paste(ligand," ")) # extra space: make a difference between a gene as ligand and a gene as target!
+circos_links = circos_links %>% inner_join(grid_col_tbl_ligand) %>% inner_join(grid_col_tbl_target)
+links_circle = circos_links %>% dplyr::select(ligand,target, weight)
+
+ligand_color = circos_links %>% distinct(ligand,color_ligand_type)
+grid_ligand_color = ligand_color$color_ligand_type %>% set_names(ligand_color$ligand)
+target_color = circos_links %>% distinct(target,color_target_type)
+grid_target_color = target_color$color_target_type %>% set_names(target_color$target)
+
+grid_col =c(grid_ligand_color,grid_target_color)
+
+# give the option that links in the circos plot will be transparant ~ ligand-target potential score
+transparency = circos_links %>% mutate(weight =(weight-min(weight))/(max(weight)-min(weight))) %>% mutate(transparency = 1-weight) %>% .$transparency 
+
+```
+
+```{r}
+target_order = circos_links$target %>% unique()
+ligand_order = c(MM_MHCIIneg_specific_ligands,
+                 MM_MHCIIpos_specific_ligands
+                 ,general_ligands
+                 ) %>% c(paste(.," ")) %>% intersect(circos_links$ligand)
+order = c(ligand_order,target_order)
+
+```
+
+```{r}
+width_same_cell_same_ligand_type = 0.5
+width_different_cell = 6
+width_ligand_target = 15
+width_same_cell_same_target_type = 0.5
+
+gaps = c(
+  #width_ligand_target,
+  rep(width_same_cell_same_ligand_type, times = (circos_links %>% filter(ligand_type == "MM MHCII(-)-specific") %>% distinct(ligand) %>% nrow() -1)),
+  width_different_cell,
+  rep(width_same_cell_same_ligand_type, times = (circos_links %>% filter(ligand_type == "MM MHCII(+)-specific") %>% distinct(ligand) %>% nrow() -1)),
+  width_different_cell,
+  rep(width_same_cell_same_ligand_type, times = (circos_links %>% filter(ligand_type == "General") %>% distinct(ligand) %>% nrow() -1)),
+  width_ligand_target,
+  rep(width_same_cell_same_target_type, times = (circos_links %>% filter(target_type == "LPS-DE") %>% distinct(target) %>% nrow() -1)),
+  width_ligand_target
+  )
+
+```
+
+```{r}
+circos.par(gap.degree = gaps)
+chordDiagram(links_circle, directional = 1,order=order,link.sort = TRUE, link.decreasing = FALSE, grid.col = grid_col,transparency = 0, diffHeight = 0.005, direction.type = c("diffHeight", "arrows"),link.arr.type = "big.arrow", link.visible = links_circle$weight >= cutoff_include_all_ligands,annotationTrack = "grid", 
+    preAllocateTracks = list(track.height = 0.075))
+# we go back to the first track and customize sector labels
+circos.track(track.index = 1, panel.fun = function(x, y) {
+    circos.text(CELL_META$xcenter, CELL_META$ylim[1], CELL_META$sector.index,
+        facing = "clockwise", niceFacing = TRUE, adj = c(0, 0.55), cex = 1)
+}, bg.border = NA) #
+
+```
+
+```{r}
+circos.clear()
+#circos.par(gap.degree = gaps)
+chordDiagram(links_circle, directional = 1,order=order,link.sort = TRUE, link.decreasing = FALSE, grid.col = grid_col,transparency = transparency, diffHeight = 0.005, direction.type = c("diffHeight", "arrows"),link.arr.type = "big.arrow", link.visible = links_circle$weight >= cutoff_include_all_ligands,annotationTrack = "grid", 
+    preAllocateTracks = list(track.height = 0.075))
+# we go back to the first track and customize sector labels
+circos.track(track.index = 1, panel.fun = function(x, y) {
+    circos.text(CELL_META$xcenter, CELL_META$ylim[1], CELL_META$sector.index,
+        facing = "clockwise", niceFacing = TRUE, adj = c(0, 0.55), cex = 1)
+}, bg.border = NA) #
+
+```
+
+#### Chord diagram of ligands and their receptors
+```{r}
+lr_network_top_df = nichenet_output$ligand_receptor_df %>% mutate(receptor_type = "LPS_MACS_receptor") %>% inner_join(ligand_type_indication_df)
+```
+
+```{r}
+grid_col_ligand =c("General" = "lawngreen",
+            "MM MHCII(-)-specific" = "darkgreen",
+            "MM MHCII(+)-specific" = "violet"
+            )
+grid_col_receptor =c(
+            "LPS_MACS_receptor" = "darkred")
+
+grid_col_tbl_ligand = tibble(ligand_type = grid_col_ligand %>% names(), color_ligand_type = grid_col_ligand)
+grid_col_tbl_receptor = tibble(receptor_type = grid_col_receptor %>% names(), color_receptor_type = grid_col_receptor)
+
+circos_links = lr_network_top_df %>% mutate(ligand = paste(ligand," ")) # extra space: make a difference between a gene as ligand and a gene as receptor!
+circos_links = circos_links %>% inner_join(grid_col_tbl_ligand) %>% inner_join(grid_col_tbl_receptor)
+links_circle = circos_links %>% dplyr::select(ligand,receptor, weight)
+
+ligand_color = circos_links %>% distinct(ligand,color_ligand_type)
+grid_ligand_color = ligand_color$color_ligand_type %>% set_names(ligand_color$ligand)
+receptor_color = circos_links %>% distinct(receptor,color_receptor_type)
+grid_receptor_color = receptor_color$color_receptor_type %>% set_names(receptor_color$receptor)
+
+grid_col =c(grid_ligand_color,grid_receptor_color)
+
+# give the option that links in the circos plot will be transparant ~ ligand-receptor potential score
+transparency = circos_links %>% mutate(weight =(weight-min(weight))/(max(weight)-min(weight))) %>% mutate(transparency = 1-weight) %>% .$transparency 
+
+```
+
+```{r}
+receptor_order = circos_links$receptor %>% unique()
+ligand_order = c(MM_MHCIIneg_specific_ligands,
+                 MM_MHCIIpos_specific_ligands, general_ligands) %>% c(paste(.," ")) %>% intersect(circos_links$ligand)
+order = c(ligand_order,receptor_order)
+
+```
+
+```{r}
+width_same_cell_same_ligand_type = 0.5
+width_different_cell = 6
+width_ligand_receptor = 15
+width_same_cell_same_receptor_type = 0.5
+
+gaps = c(
+  # width_ligand_target,
+  rep(width_same_cell_same_ligand_type, times = (circos_links %>% filter(ligand_type == "MM MHCII(-)-specific") %>% distinct(ligand) %>% nrow() -1)),
+  width_different_cell,
+  rep(width_same_cell_same_ligand_type, times = (circos_links %>% filter(ligand_type == "MM MHCII(+)-specific") %>% distinct(ligand) %>% nrow() -1)),
+  width_different_cell,
+  rep(width_same_cell_same_ligand_type, times = (circos_links %>% filter(ligand_type == "General") %>% distinct(ligand) %>% nrow() -1)),
+  width_ligand_receptor,
+  rep(width_same_cell_same_receptor_type, times = (circos_links %>% filter(receptor_type == "LPS_MACS_receptor") %>% distinct(receptor) %>% nrow() -1)),
+  width_ligand_receptor
+  )
+
+```
+
+```{r}
+#circos.par(gap.degree = gaps)
+chordDiagram(links_circle, directional = 1,order=order,link.sort = TRUE, link.decreasing = FALSE, grid.col = grid_col,transparency = transparency, diffHeight = 0.005, direction.type = c("diffHeight", "arrows"),link.arr.type = "big.arrow", link.visible = links_circle$weight >= cutoff_include_all_ligands,annotationTrack = "grid", 
+    preAllocateTracks = list(track.height = 0.075))
+# we go back to the first track and customize sector labels
+circos.track(track.index = 1, panel.fun = function(x, y) {
+    circos.text(CELL_META$xcenter, CELL_META$ylim[1], CELL_META$sector.index,
+        facing = "clockwise", niceFacing = TRUE, adj = c(0, 0.55), cex = 0.8)
+}, bg.border = NA) 
+
+```

@@ -1,0 +1,154 @@
+---
+title: "Interactions analyses with CellChat on PBS condition"
+author: "Matei Teleman"
+date: "11/3/2021"
+output: html_document
+---
+
+## Import libraries
+```{r}
+library(CellChat)
+library(ggplot2)                  
+library(patchwork)
+library(ggalluvial)
+library(igraph)
+library(dplyr)
+library(Seurat)
+```
+
+
+## Preparing for the data for the Nichenet analyses
+### Importation of .RDS file of meningeal dataset after QC and demultiplexing and annotation of the clusters
+```{r}
+so <- readRDS("/mnt/DOSI/PLATEFORMES/BIOINFORMATIQUE/03_WORKSPACE/teleman/ciml-rrlab/Project/TotalMeningeLPS/202010028_R333_RR/01_Input/Seurat objects/TotalMeningeLPS_202010028_R333_RR_sc10x.rna.seurat_50PCA.RDS")
+DimPlot(so,label = T,reduction = "umap1")
+new.cluster.ids <- c("Stromal", "Stromal", "Stromal","Stromal","Stromal","Stromal","B cell","Macrophages","Endothelium"
+                     , "Neutrophils Monocytes", "Mast cell","Activated Macrophages", "NK","Stromal",
+                     "ILC2","DC/pDC", "Osteoblasts", "Endothelium","Schwann","B cell", "MigDC","NK","Neuron","Unknown",
+                     "Stromal","Neutrophils Monocytes","Smooth muscle","Lymphatics","B cell")
+names(new.cluster.ids) <- levels(so)
+so <- RenameIdents(so, new.cluster.ids)
+DimPlot(so,label = T,reduction = "umap1")
+```
+
+### adding MM MHCII+ & MM MHCII- in annotations
+#### Clustering the macrophages clusters after subsetting them
+```{r}
+sbmacs <- subset(so, idents = c("Macrophages","Activated Macrophages"))
+sbmacs <- SetIdent(sbmacs, value = sbmacs[["MULTI_Sample"]])
+sbmacs <- FindNeighbors(sbmacs, dims = 1:50)
+sbmacs <- FindClusters(sbmacs, resolution = 0.3,method = 1)
+sbmacs <- RenameIdents(sbmacs,"0" = "MM MHCII-","1" = "MM MHCII+","2" = "MM MHCII+","3" = "MM MHCII-")
+DimPlot(sbmacs,reduction = "umap1")
+```
+
+#### Removing the macrophages clusters from the original seurat object of the meninges
+```{r}
+so.sans.macs <- subset(so, idents = unique(c("Stromal", "Stromal", "Stromal","Stromal","Stromal","Stromal","B cell","Endothelium"
+                     , "Neutrophils Monocytes", "Mast cell", "NK","Stromal",
+                     "ILC2","DC/pDC", "Osteoblasts", "Endothelium","Schwann","B cell", "MigDC","NK","Neuron","Unknown",
+                     "Stromal","Neutrophils Monocytes","Smooth muscle","Lymphatics","B cell")))
+DimPlot(so.sans.macs)
+```
+
+#### Merging the two resulting seurat objects
+```{r}
+so.v2 <- merge(so.sans.macs,sbmacs,merge.data = T,merge.dr = "umap1")
+DimPlot(so.v2)
+```
+
+#### Subsetting the PBS-only cells
+```{r}
+so.v2.pbs <- subset(so.v2, subset = MULTI_Sample == "NI")
+DimPlot(so.v2.pbs,reduction = "umap1")
+```
+
+### Preparing CellChat datasets
+```{r}
+data.input <- GetAssayData(so.v2.pbs, assay = "RNA", slot = "data") # normalized data matrix
+labels <- Idents(so.v2.pbs)
+meta <- data.frame(group = labels, row.names = names(labels)) # create a dataframe of the cell labels
+cellchat <- createCellChat(object = data.input, meta = meta, group.by = "group")
+cellchat <- addMeta(cellchat, meta = meta, meta.name = "labels")
+cellchat <- setIdent(cellchat, ident.use = "labels") # set "labels" as default cell identity
+levels(cellchat@idents) # show factor levels of the cell labels
+```
+
+```{r}
+CellChatDB <- CellChatDB.mouse # use CellChatDB.mouse if running on mouse data
+showDatabaseCategory(CellChatDB)
+```
+
+
+```{r}
+# Show the structure of the database
+dplyr::glimpse(CellChatDB$interaction)
+
+# use a subset of CellChatDB for cell-cell communication analysis
+CellChatDB.use <- subsetDB(CellChatDB, search = "Secreted Signaling") # use Secreted Signaling
+# use all CellChatDB for cell-cell communication analysis
+CellChatDB.use <- CellChatDB # simply use the default CellChatDB
+
+# set the used database in the object
+cellchat@DB <- CellChatDB.use
+```
+
+## Performing CellChat analyses
+```{r}
+cellchat <- subsetData(cellchat) # subset the expression data of signaling genes for saving computation cost
+#future::plan("multiprocess", workers =12) # do parallel
+
+cellchat <- identifyOverExpressedGenes(cellchat)
+cellchat <- identifyOverExpressedInteractions(cellchat)
+cellchat <- projectData(cellchat, PPI.mouse)
+```
+
+```{r}
+cellchat <- computeCommunProb(cellchat, raw.use = TRUE)
+# Filter out the cell-cell communication if there are only few number of cells in certain cell groups
+cellchat <- filterCommunication(cellchat, min.cells = 10)
+```
+
+```{r}
+cellchat <- computeCommunProbPathway(cellchat)
+cellchat <- aggregateNet(cellchat)
+groupSize <- as.numeric(table(cellchat@idents))
+```
+
+## Visualization of the results
+### Global visual
+```{r}
+par(mfrow = c(1,2), xpd=TRUE)
+netVisual_circle(cellchat@net$count, vertex.weight = groupSize, weight.scale = T, label.edge= F, title.name = "Number of interactions")
+netVisual_circle(cellchat@net$weight, vertex.weight = groupSize, weight.scale = T, label.edge= F, title.name = "Interaction weights/strength")
+```
+
+### Visualization for each meningeal population
+```{r}
+mat <- cellchat@net$weight
+dim(mat)
+par(mfrow = c(3,4), xpd=TRUE)
+for (i in 1:nrow(mat)) {
+  mat2 <- matrix(0, nrow = nrow(mat), ncol = ncol(mat), dimnames = dimnames(mat))
+  mat2[i, ] <- mat[i, ]
+  netVisual_circle(mat2, vertex.weight = groupSize, weight.scale = T, edge.weight.max = max(mat), title.name = rownames(mat)[i])
+}
+```
+
+### Visualization for macrophages interactions
+In clust2 vector, change 7 by 8 for the other population. 7 stands for MM MHCII- and 8 for MM MCHII+.
+```{r}
+filtered_matrix <- matrix(0, nrow = nrow(mat), ncol = ncol(mat), dimnames = dimnames(mat))
+clusts2 <- c(8)#,7)
+for (c in clusts2){
+  filtered_matrix[,c] <- mat[, c]
+  filtered_matrix[c,] <- mat[c,]
+}
+
+netVisual_circle(filtered_matrix,vertex.weight = groupSize, weight.scale = T, edge.weight.max = max(mat))
+```
+
+```{r}
+netVisual_bubble(cellchat, sources.use = c(7,8),targets.use = c(12), remove.isolate = TRUE,font.size =10)
+netVisual_bubble(cellchat, sources.use = c(12),targets.use = c(7,8), remove.isolate = TRUE,font.size =10)
+```

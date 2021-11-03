@@ -1,0 +1,182 @@
+---
+title: "Clustering of the Macrophages after sub-setting"
+author: "Matei Teleman"
+date: "11/3/2021"
+output: html_document
+---
+
+
+## Import libraries
+```{r}
+library(CellChat)
+library(ggplot2)
+library(ggalluvial)
+library(igraph)
+library(dplyr)
+library(Seurat)
+library(tidyverse)
+library("writexl")
+library(clusterProfiler)
+library(enrichplot)
+organism = "org.Mm.eg.db"
+BiocManager::install(organism, character.only = TRUE)
+options(connectionObserver = NULL)
+library(organism, character.only = TRUE)
+library(BiocParallel)
+library(pathview)
+library(EnhancedVolcano)
+```
+
+
+## Create function for GSEA with GO database
+```{r}
+
+GO_analysis <- function(data,pn,eps,fs){
+  # we want the log2 fold change 
+  original_gene_list <- data$avg_log2FC
+  
+  # name the vector
+  names(original_gene_list) <- data$gene
+  
+  # omit any NA values 
+  gene_list<-na.omit(original_gene_list)
+  gene_list <- gene_list[!is.na(gene_list)]
+  # sort the list in decreasing order (required for clusterProfiler)
+  gene_list = sort(gene_list, decreasing = TRUE)
+  #print(gene_list)
+  gse <- gseGO(geneList=gene_list, 
+             ont ="ALL", 
+             keyType = "SYMBOL", 
+             #nPerm = 10000, 
+             minGSSize = 3, 
+             maxGSSize = length(gene_list)-1, 
+             pvalueCutoff = 0.05, 
+             verbose = TRUE, 
+             OrgDb = org.Mm.eg.db,
+             scoreType = pn,
+             pAdjustMethod = "none",eps = eps)
+  require(DOSE)
+  return(gse)
+  }
+```
+
+## Importation of .RDS file of meningeal dataset after QC and demultiplexing
+```{r}
+s_o <- readRDS("/mnt/DOSI/PLATEFORMES/BIOINFORMATIQUE/03_WORKSPACE/teleman/ciml-rrlab/Project/TotalMeningeLPS/202010028_R333_RR/01_Input/Seurat objects/TotalMeningeLPS_202010028_R333_RR_sc10x.rna.seurat_50PCA.RDS")
+DimPlot(s_o,reduction = "umap1", label = T)
+s_o <- FindClusters(s_o, resolution = 1,method = 1)
+DimPlot(s_o,reduction = "umap1", label = T)
+# Plot of C1qa (marker gene of macrophages in meninges)
+FeaturePlot(s_o,reduction = "umap1",features = "C1qa" )
+# Plot of CD206/Mrc1
+FeaturePlot(s_o,reduction = "umap1",features = "Mrc1" )
+```
+
+
+## Sub-setting of both macrophages cluster
+```{r}
+sbmacs <- subset(s_o, idents = c("7","11"))
+DimPlot(sbmacs, reduction = "umap1")
+# Plot of meninges cell population depending of their conditions : PBS or LPS
+DimPlot(sbmacs, reduction = "umap1",group.by = "MULTI_Sample")
+# Plot of C1qa (marker gene of macrophages in meninges)
+FeaturePlot(sbmacs,"C1qa",reduction = "umap1")
+```
+
+## Clustering of the macrophages subset
+```{r}
+# Setting study condition (LPS or PBS) as active identity
+sbmacs <- SetIdent(sbmacs, value = sbmacs[["MULTI_Sample"]])
+DimPlot(sbmacs,reduction = "umap1")
+# Clustering
+sbmacs <- FindNeighbors(sbmacs, dims = 1:50)
+sbmacs <- FindClusters(sbmacs, resolution = 0.3,method = 1)
+# Ploting new clustering
+DimPlot(sbmacs,reduction = "umap1")
+DimPlot(sbmacs,reduction = "umap1",group.by = "MULTI_Sample")
+# Ploting a gene marker of MHC-II
+VlnPlot(sbmacs,"H2-Ab1")
+FeaturePlot(sbmacs,reduction = "umap1",features = "H2-Ab1")
+VlnPlot(sbmacs,"H2-Ab1",split.by = "MULTI_Sample")
+```
+
+
+## Computing DEGs for both macrophages populations
+With the obtained clustering, we assign clusters :
+  - 0 : MM CD206+ MHCII- PBS
+  - 1 : MM CD206+ MHCII+ PBS
+  - 2 : MM CD206+ MHCII+ LPS
+  - 3 : MM CD206+ MHCII- LPS
+  
+### Computing MM CD206+ MHCII+ DEGs between LPS and PBS conditions
+```{r}
+dpos.degs <- FindMarkers(sbmacs,ident.1 = "2",ident.2 = "1",min.pct = 0.25) %>% rownames_to_column("gene") %>% filter(p_val_adj <= 0.05)
+head(dpos.degs)
+# Saving locally output results
+write_xlsx(dpos.degs,path = "path/MACS_2POS_DEGs_LPSvsPBS_clustering.xlsx")
+```
+
+### Computing MM CD206+ MHCII- DEGs between LPS and PBS conditions
+```{r}
+dneg.degs <- FindMarkers(sbmacs,ident.1 = "3",ident.2 = "0",min.pct = 0.25) %>% rownames_to_column("gene") %>% filter(p_val_adj <= 0.05)
+head(dneg.degs)
+# Saving locally output results
+write_xlsx(dneg.degs,path = "path/MACS_2NEG_DEGs_LPSvsPBS_clustering.xlsx")
+```
+
+## Analyzing DEGs output
+### GSEA Analysis of MM CD206+ MHCII+ DEGs on GO database
+```{r}
+mdpos.cl.pathways <- GO_analysis(dpos.degs,NULL,1e-10,15)
+# Ploting top 10 pathways
+dotplot(mdpos.cl.pathways, showCategory=10, split=".sign") + facet_grid(.~.sign)
+```
+
+### GSEA Analysis of MM CD206+ MHCII- DEGs on GO database
+```{r}
+mdneg.cl.pathways <-GO_analysis(dneg.degs,NULL,1e-10,15)
+# Ploting top 10 pathways
+dotplot(mdneg.cl.pathways, showCategory=10, split=".sign") + facet_grid(.~.sign)
+```
+
+### Volcano plot of MM CD206+ MHCII+ DEGs on GO database
+```{r}
+EnhancedVolcano(dpos.degs,lab = dpos.degs$gene,x = 'avg_log2FC',y = 'p_val')
+```
+
+### Volcano plot of MM CD206+ MHCII- DEGs on GO database
+```{r}
+EnhancedVolcano(dneg.degs,lab = dneg.degs$gene,x = 'avg_log2FC',y = 'p_val')
+```
+
+## Computing DEGs for macrophages CD206+
+```{r}
+macs.degs <- FindMarkers(sbmacs,ident.1 = c("3","2"),ident.2 = c("1","0"),min.pct = 0.25)%>% rownames_to_column("gene") %>% filter(p_val_adj <= 0.05)
+head(macs.degs)
+write_xlsx(macs.degs,path = "path/TOTAL_MACS_CD206_DEGs_LPSvsPBS_clustering.xlsx")
+```
+
+### Plot Volcano plot of MM CD206+ DEGs
+```{r}
+EnhancedVolcano(macs.degs,lab = macs.degs$gene,x = 'avg_log2FC',y = 'p_val')
+```
+
+### GSEA Analysis of MM CD206+ DEGs on GO database
+```{r}
+GO_analysis(macs.degs,NULL,1e-10,12)
+```
+
+## Venn diagram between MM CD206+ MHCII+ & MM CD206+ MHCII- DEGs
+```{r}
+ggvenn(list(`Macs CD206+ MHC-II+` = dpos.degs$gene,`Macs CD206+ MHC-II-` = dneg.degs$gene),set_name_size = 12,show_percentage = F,text_size = 15)
+```
+
+## Venn diagram between MM CD206+ MHCII+ & MM CD206+ MHCII- DEGs (filtered with the corresponding thresholds of Volcano plots)
+```{r}
+filt_degs2pos <- subset(dpos.degs,subset = abs(avg_log2FC) > 1 & p_val_adj < 1e-5)
+filt_degs2neg <- subset(dneg.degs,subset = abs(avg_log2FC) > 1 & p_val_adj < 1e-5)
+```
+
+```{r}
+ggvenn(data = list(`Macrophages MHCII+` = filt_degs2pos$gene,`Macrophages MHCII-` = filt_degs2neg$gene),show_percentage = F,set_name_size = 4,text_size = 9,)
+```

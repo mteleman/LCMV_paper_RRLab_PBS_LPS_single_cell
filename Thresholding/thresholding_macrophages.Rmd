@@ -1,0 +1,192 @@
+---
+title: "Thresholding of the Macrophages after sub-setting"
+author: "Matei Teleman"
+date: "11/3/2021"
+output: html_document
+---
+
+## Import libraries
+```{r}
+library(CellChat)
+library(ggplot2)
+library(ggalluvial)
+library(igraph)
+library(dplyr)
+library(Seurat)
+library(tidyverse)
+library("writexl")
+library(clusterProfiler)
+library(enrichplot)
+organism = "org.Mm.eg.db"
+BiocManager::install(organism, character.only = TRUE)
+options(connectionObserver = NULL)
+library(organism, character.only = TRUE)
+library(BiocParallel)
+library(pathview)
+library(EnhancedVolcano)
+```
+
+
+## Create function for GSEA with GO database
+```{r}
+GO_analysis <- function(data,pn,eps,fs){
+  # we want the log2 fold change 
+  original_gene_list <- data$avg_log2FC
+  
+  # name the vector
+  names(original_gene_list) <- data$gene
+  
+  # omit any NA values 
+  gene_list<-na.omit(original_gene_list)
+  gene_list <- gene_list[!is.na(gene_list)]
+  # sort the list in decreasing order (required for clusterProfiler)
+```
+
+
+```{r}
+gene_list = sort(gene_list, decreasing = TRUE)
+  #print(gene_list)
+  gse <- gseGO(geneList=gene_list, 
+             ont ="ALL", 
+             keyType = "SYMBOL", 
+             #nPerm = 10000, 
+             minGSSize = 3, 
+             maxGSSize = length(gene_list)-1, 
+             pvalueCutoff = 0.05, 
+             verbose = TRUE, 
+             OrgDb = org.Mm.eg.db,
+             scoreType = pn,
+             pAdjustMethod = "none",eps = eps)
+  require(DOSE)
+  return(gse)
+  }
+```
+
+## Importation of .RDS file of meningeal dataset after QC and demultiplexing
+```{r}
+s_o <- readRDS("/mnt/DOSI/PLATEFORMES/BIOINFORMATIQUE/03_WORKSPACE/teleman/ciml-rrlab/Project/TotalMeningeLPS/202010028_R333_RR/01_Input/Seurat objects/TotalMeningeLPS_202010028_R333_RR_sc10x.rna.seurat_50PCA.RDS")
+DimPlot(s_o,reduction = "umap1", label = T)
+s_o <- FindClusters(s_o, resolution = 1,method = 1)
+DimPlot(s_o,reduction = "umap1", label = T)
+# Plot of C1qa (marker gene of macrophages in meninges)
+FeaturePlot(s_o,reduction = "umap1",features = "C1qa" )
+# Plot of CD206/Mrc1
+FeaturePlot(s_o,reduction = "umap1",features = "Mrc1" )
+```
+
+## Sub-setting of both macrophages cluster
+```{r}
+sbmacs <- subset(s_o, idents = c("7","11"))
+DimPlot(sbmacs, reduction = "umap1")
+# Plot of meninges cell population depending of their conditions : PBS or LPS
+DimPlot(sbmacs, reduction = "umap1",group.by = "MULTI_Sample")
+# Plot of C1qa (marker gene of macrophages in meninges)
+FeaturePlot(sbmacs,"C1qa",reduction = "umap1")
+```
+
+## Selection of MM CD206+ based on CD206 expression
+```{r}
+sbmacs <- AddModuleScore(object = sbmacs,features = list(c("Mrc1")),name = "CD206")
+head(sbmacs@meta.data$CD2061)
+macs206.s <- subset(sbmacs, subset = CD2061 >0)
+DimPlot(macs206.s)
+FeaturePlot(macs206.s,"Mrc1")
+```
+
+### Computation of MM CD206+ DEGs
+```{r}
+macs206.s2= subset(macs206.s)
+# Setting study conditions (LPS and PBS) as active identity
+macs206.s2 = SetIdent(macs206.s2, value = macs206.s2[["MULTI_Sample"]])
+DimPlot(macs206.s2)
+
+condition_oi = "LPS"
+condition_reference = "NI" 
+  
+macs206.DEGS = FindMarkers(object = macs206.s2, ident.1 = condition_oi, ident.2 = condition_reference, min.pct = 0.25) %>% rownames_to_column("gene") %>% filter(p_val_adj <= 0.05)
+macs206.DEGS = macs206.DEGS %>% filter(abs(avg_log2FC) >= 0.25)
+head(macs206.DEGS)
+write_xlsx(macs206.DEGS,path = "path/TOTAL_MACS_CD206_DEGs_LPSvsPBS_threshold.xlsx")
+```
+
+### Volcano plot of MM CD206+ DEGs
+```{r}
+EnhancedVolcano(macs206.DEGS,lab = macs206.DEGS$gene,x = 'avg_log2FC',y = 'p_val',labSize = 10,gridlines.major = F,gridlines.minor = F)
+```
+
+### GSEA Analysis of MM CD206+ DEGs on GO database
+```{r}
+GO_analysis(macs206.DEGS,NULL,1e-10,12)
+```
+
+## Selection of MM CD206+ MHCII+
+Selection is based on the expression of four marker genes of MHCII : H2-Ab1, Cd74, H2-Eb1 and H2-Aa.
+```{r}
+macs206.s <- AddModuleScore(macs206.s,features=list(c("H2-Ab1","Cd74","H2-Eb1","H2-Aa")),name = "MHC2")
+FeaturePlot(macs206.s,"MHC21")
+FeaturePlot(macs206.s,"H2-Ab1")
+macs206_2p.s <- subset(macs206.s,subset = MHC21 >0)
+DimPlot(macs206_2p.s)
+FeaturePlot(macs206_2p.s,"MHC21")
+```
+
+### Computation of MM CD206+ MHCII+ DEGs
+```{r}
+macs206_2p.s2= subset(macs206_2p.s)
+macs206_2p.s2 = SetIdent(macs206_2p.s2, value = macs206_2p.s2[["MULTI_Sample"]])
+
+condition_oi = "LPS"
+condition_reference = "NI" 
+  
+macs206_2p.DEGS = FindMarkers(object = macs206_2p.s2, ident.1 = condition_oi, ident.2 = condition_reference, min.pct = 0.25) %>% rownames_to_column("gene")
+macs206_2p.DEGS = macs206_2p.DEGS %>% filter(abs(avg_log2FC) >= 0.25)
+head(macs206_2p.DEGS)
+write_xlsx(macs206_2p.DEGS,path = "path/MACS_2POS_DEGs_LPSvsPBS_threshold.xlsx")
+```
+
+### Volcano plot of MM CD206+ MHCII+ DEGs
+```{r}
+EnhancedVolcano(macs206_2p.DEGS,lab = macs206_2p.DEGS$gene,x = 'avg_log2FC',y = 'p_val',labSize = 10,gridlines.major = F,gridlines.minor = F)
+```
+
+### GSEA Analysis of MM CD206+ MHCII+ DEGs on GO database
+```{r}
+GO_analysis(macs206_2p.DEGS,NULL,1e-10,12)
+```
+
+## Selection of MM CD206+ MHCII-
+```{r}
+macs206_2n.s <- subset(macs206.s,subset = MHC21 <=0)
+DimPlot(macs206_2n.s)
+FeaturePlot(macs206_2n.s,"MHC21")
+```
+
+### Computation of MM CD206+ MHCII- DEGs
+```{r}
+macs206_2n.s2= subset(macs206_2n.s)
+macs206_2n.s2 = SetIdent(macs206_2n.s2, value = macs206_2n.s2[["MULTI_Sample"]])
+DimPlot(macs206_2n.s2)
+
+condition_oi = "LPS"
+condition_reference = "NI" 
+  
+macs206_2n.DEGS = FindMarkers(object = macs206_2n.s2, ident.1 = condition_oi, ident.2 = condition_reference, min.pct = 0.25) %>% rownames_to_column("gene")
+macs206_2n.DEGS = macs206_2n.DEGS %>% filter(abs(avg_log2FC) >= 0.25)
+head(macs206_2n.DEGS)
+write_xlsx(macs206_2n.DEGS,path = "path/MACS_2NEG_DEGs_LPSvsPBS_threshold.xlsx")
+```
+
+### Volcano plot of MM CD206+ MHCII- DEGs
+```{r}
+EnhancedVolcano(macs206_2n.DEGS,lab = macs206_2n.DEGS$gene,x = 'avg_log2FC',y = 'p_val',labSize = 10,gridlines.major = F,gridlines.minor = F)
+```
+
+### GSEA Analysis of MM CD206+ MHCII- DEGs on GO database
+```{r}
+GO_analysis(macs206_2n.DEGS,NULL,1e-10,12)
+```
+
+## Venn diagram between MM CD206+ MHCII+ and MM CD206+ MHCII- DEGs
+```{r}
+ggvenn(list(`Macs CD206+ MHC-II+` = macs206_2p.DEGS$gene,`Macs CD206+ MHC-II-` = macs206_2n.DEGS$gene),set_name_size = 3,show_percentage = F,text_size = 7)
+```
