@@ -136,10 +136,10 @@ for (i in 1:nrow(mat)) {
 ```
 
 ### Visualization for macrophages interactions
-In clust2 vector, change 7 by 8 for the other population. 7 stands for MM MHCII- and 8 for MM MCHII+.
+In clust2 vector, change 9 by 8 for the other population. 8 stands for MM MHCII- and 9 for MM MCHII+.
 ```{r}
 filtered_matrix <- matrix(0, nrow = nrow(mat), ncol = ncol(mat), dimnames = dimnames(mat))
-clusts2 <- c(8)#,7)
+clusts2 <- c(9)#,8)
 for (c in clusts2){
   filtered_matrix[,c] <- mat[, c]
   filtered_matrix[c,] <- mat[c,]
@@ -149,6 +149,7 @@ netVisual_circle(filtered_matrix,vertex.weight = groupSize, weight.scale = T, ed
 ```
 
 ```{r}
-netVisual_bubble(cellchat, sources.use = c(7,8),targets.use = c(12), remove.isolate = TRUE,font.size =10)
-netVisual_bubble(cellchat, sources.use = c(12),targets.use = c(7,8), remove.isolate = TRUE,font.size =10)
+netVisual_bubble(cellchat, sources.use = c(8,9),targets.use = c(12), remove.isolate = TRUE,font.size =10)
+netVisual_bubble(cellchat, sources.use = c(12),targets.use = c(8,9), remove.isolate = TRUE,font.size =10)
 ```
+
