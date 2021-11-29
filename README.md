@@ -2,21 +2,22 @@
 
 ## Article information
 
-**Title:** Distinct waves from the hemogenic endothelium give rise to layered Lymphoid Tissue Inducer cell ontogeny.
+**Title:** Post-natal meningeal macrophages protect against viral neuroinfection.
 
-**Authors:** Milesa Simic 1, Iris Manosalva 1, Lionel Spinelli 1 , Rebecca Gentek 1&, Raheleh R. Shayan 1, Carole Siret 1, Mathilde Girard-Madoux 1, Shuaiwei Wang 1, Lauriane de Fabritus 1, Janneke Verschoor 1, Yann M. Kerdiles 1, Marc Bajenoff 1, Ralf Stumm 2, Rachel Golub 3, Serge A. van de Pavert 1%
+**Authors:** Julie Rebejac(1), Elisa Eme-Scolan(1), Matei Teleman(1), Lionel Spinelli(1), Emeline Gallo(1), Annie Roussel-Queval(1), Ana Zarubica(2), Amandine Sansoni(2), Quentin Bardin(2), Philippe Hoest(3), Bernard Malissen(1,2), Marie-Cécile Michallet(4), Toby Lawrence(1,5), Monica Manglani(6), Dorian B. McGavern(6) & Rejane Rua(1)
 
-1 Aix-Marseille Univ, Centre National de la Recherche Scientifique (CNRS), Institut National de la Santé et de la Recherche Médicale (INSERM), Centre d'Immunologie de Marseille-Luminy (CIML), Marseille, France.
+(1) Aix Marseille University, Inserm, CNRS, Immunology Center of Marseille-Luminy, Marseille, France
 
-2 Institute of Pharmacology and Toxicology, Jena University Hospital, Friedrich Schiller University Jena, 07747 Jena, Germany. 
-3 Institut Pasteur, Immunology Department, Lymphopoiesis Unit, Inserm U668, University Paris Diderot, Paris, France.
+(2) Centre d’Immunophénomique, Aix Marseille Université, INSERM, CNRS, 13288 Marseille, France
+(3) TERI (Tumor Escape, Resistance and Immunity) Department, Centre de Recherche en Cancérologie de Lyon, Centre Léon Bérard, Université de Lyon, Université Claude Bernard Lyon 1, INSERM 1052, CNRS 5286, 69008 Lyon, France
+(4) Centre for Inflammation Biology and Cancer Immunology, Cancer Research UK King's Health Partners Centre, School of Immunology and Microbial Sciences, King's College London, London SE1 1UL, UK.
+(5) Viral Immunology and Intravital Imaging Section, National Institute of Neurological Disorders and Stroke, National Institutes of Health, Bethesda, MD 20892, USA
 
-& Currently at at Centre for Inflammation Research (CIR), Institute of Regeneration and Repair, University of Edinburgh, Edinburgh, United Kingdom
 
-% Corresponding author: E-mail: vandepavert@ciml.univ-mrs.fr
+% Corresponding author: E-mail: rua@ciml.univ-mrs.fr
 
 **Summary:**
-During embryogenesis Lymphoid Tissue Inducer (LTi) cells are essential for lymph node organogenesis. These cells are part of the Innate Lymphoid Cell (ILC) family. Although their earliest embryonic hematopoietic origin is unclear, other innate immune cells were shown to be derived from both early hemogenic endothelium in the yolk-sac as well as the aorta-gonad-mesonephros. A proper model to discriminate between these locations was unavailable. In this study, using a new Cxcr4-CreERT2 lineage tracing model, we identify a major contribution from embryonic hemogenic endothelium, but not yolk-sac, towards the LTi progenitors. Conversely, embryonic LTi cells are replaced by hematopoietic stem cell derived cells in adult. We further show that within the fetal liver common lymphoid progenitors differentiate into highly dynamic alpha-lymphoid precursor cells, which at this embryonic stage preferentially mature into LTi precursors and establish their functional LTi cell identity only after reaching the periphery.
+Due to the vital importance of the Central Nervous System (CNS), its potential infection and inflammation have to be tightly controlled. The surface of the CNS is connected to the periphery by a rich and complex tissue, the meninges. They contain a vast network of macrophages subdivided in at least two subpopulations endowed with elusive functions: a neonatal, MHC-II negative macrophage population, and an post-natal population expressing MHC-II. Using in situ-histocytometry, flow cytometry, and single-cell RNA sequencing approaches, we showed that those populations have opposite dynamic behaviors in response to in vivo peripheral challenges such as LPS, SARS-CoV2 and lymphocytic choriomeningitis virus (LCMV), with an apparent contraction of the MHC-II+ population. Focusing on LCMV infection in experimental mouse models and using innovative pharmacological and genetic depletion strategies, we show that meningeal macrophages (MM) represent an early line of protection against this neuroinvasive pathogen. In their absence, specific areas in the meninges became highly infected, leading to fatal brain disease. While their intrinsic sensing of viral replication through the Mitochondrial antiviral-signaling protein (MAVS) was dispensable, sensing of IFNs through the STAT1 pathway played an important role in controlling viral spread. Unexpectedly, the post-natal MHC-II+ macrophage population had an important role in controlling neuroinfection, by shutting down biosynthesis pathways and efficiently blocking viral replication. This work helps understanding the spatial organization of the brain defense system and the cellular and molecular mechanisms involved in CNS protection.
 
 DOI : [10.1016/j.celrep.2020.108004](https://doi.org/10.1016/j.celrep.2020.108004) 
 
