@@ -4,7 +4,7 @@
 
 **Title:** Post-natal meningeal macrophages protect against viral neuroinfection.
 
-**Authors:** Julie Rebejac(1), Elisa Eme-Scolan(1), Matei Teleman(1), Lionel Spinelli(1), Emeline Gallo(1), Annie Roussel-Queval(1), Ana Zarubica(2), Amandine Sansoni(2), Quentin Bardin(2), Philippe Hoest(3), Bernard Malissen(1,2), Marie-Cécile Michallet(4), Toby Lawrence(1,5), Monica Manglani(6), Dorian B. McGavern(6) & Rejane Rua(1)
+**Authors:** Julie Rebejac(1), Elisa Eme-Scolan(1), Matei Teleman(1), Lionel Spinelli(1), Emeline Gallo(1), Annie Roussel-Queval(1), Ana Zarubica(2), Amandine Sansoni(2), Quentin Bardin(2), Philippe Hoest(3), Bernard Malissen(1,2), Marie-Cécile Michallet(4), Toby Lawrence(1,5), Monica Manglani(6), Dorian B. McGavern(6) & Rejane Rua(1)%
 
 (1) Aix Marseille University, Inserm, CNRS, Immunology Center of Marseille-Luminy, Marseille, France
 
