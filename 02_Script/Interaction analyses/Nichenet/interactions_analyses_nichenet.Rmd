@@ -56,7 +56,7 @@ sbmacs <- subset(so, idents = c("Macrophages","Activated Macrophages"))
 sbmacs <- SetIdent(sbmacs, value = sbmacs[["MULTI_Sample"]])
 sbmacs <- FindNeighbors(sbmacs, dims = 1:50)
 sbmacs <- FindClusters(sbmacs, resolution = 0.3,method = 1)
-sbmacs <- RenameIdents(sbmacs,"0" = "MM CD206 + MHCII-","1" = "MM CD206+ MHCII+","2" = "MM CD206+ MHCII+","3" = "MM CD206+ MHCII-")
+sbmacs <- RenameIdents(sbmacs,"0" = "MM CD206+ MHCII-","1" = "MM CD206+ MHCII+","2" = "MM CD206+ MHCII+","3" = "MM CD206+ MHCII-")
 DimPlot(sbmacs,reduction = "umap1")
 ```
 
@@ -83,7 +83,7 @@ nichenet_output = nichenet_seuratobj_aggregate(
                      "Stromal","Neutrophils Monocytes","Smooth muscle","Lymphatics","B cell")),
   condition_colname = "MULTI_Sample", condition_oi = "LPS", condition_reference = "NI", 
   sender = sender_celltypes, 
-  ligand_target_matrix = ligand_target_matrix, lr_network = lr_network, weighted_networks = weighted_networks, organism = "mouse")
+  ligand_target_matrix = ligand_target_matrix, lr_network = lr_network, weighted_networks = weighted_networks, organism = "mouse",geneset = "up")
 ```
 
 ## Visualizing Nichenet output results

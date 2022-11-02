@@ -40,10 +40,7 @@ GO_analysis <- function(data,pn,eps,fs){
   gene_list<-na.omit(original_gene_list)
   gene_list <- gene_list[!is.na(gene_list)]
   # sort the list in decreasing order (required for clusterProfiler)
-```
 
-
-```{r}
 gene_list = sort(gene_list, decreasing = TRUE)
   #print(gene_list)
   gse <- gseGO(geneList=gene_list, 

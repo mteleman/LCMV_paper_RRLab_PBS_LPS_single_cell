@@ -23,7 +23,7 @@ library(Seurat)
 so <- readRDS("/mnt/DOSI/PLATEFORMES/BIOINFORMATIQUE/03_WORKSPACE/teleman/ciml-rrlab/Project/TotalMeningeLPS/202010028_R333_RR/01_Input/Seurat objects/TotalMeningeLPS_202010028_R333_RR_sc10x.rna.seurat_50PCA.RDS")
 DimPlot(so,label = T,reduction = "umap1")
 new.cluster.ids <- c("Stromal", "Stromal", "Stromal","Stromal","Stromal","Stromal","B cell","Macrophages","Endothelium"
-                     , "Neutrophils Monocytes", "Mast cell","Activated Macrophages", "NK","Stromal",
+                     , "Neutrophils Monocytes", "Mast cell","Macrophages", "NK","Stromal",
                      "ILC2","DC/pDC", "Osteoblasts", "Endothelium","Schwann","B cell", "MigDC","NK","Neuron","Unknown",
                      "Stromal","Neutrophils Monocytes","Smooth muscle","Lymphatics","B cell")
 names(new.cluster.ids) <- levels(so)
@@ -34,7 +34,7 @@ DimPlot(so,label = T,reduction = "umap1")
 ### adding MM MHCII+ & MM MHCII- in annotations
 #### Clustering the macrophages clusters after subsetting them
 ```{r}
-sbmacs <- subset(so, idents = c("Macrophages","Activated Macrophages"))
+sbmacs <- subset(so, idents = c("Macrophages","Macrophages"))
 sbmacs <- SetIdent(sbmacs, value = sbmacs[["MULTI_Sample"]])
 sbmacs <- FindNeighbors(sbmacs, dims = 1:50)
 sbmacs <- FindClusters(sbmacs, resolution = 0.3,method = 1)
@@ -48,7 +48,7 @@ so.sans.macs <- subset(so, idents = unique(c("Stromal", "Stromal", "Stromal","St
                      , "Neutrophils Monocytes", "Mast cell", "NK","Stromal",
                      "ILC2","DC/pDC", "Osteoblasts", "Endothelium","Schwann","B cell", "MigDC","NK","Neuron","Unknown",
                      "Stromal","Neutrophils Monocytes","Smooth muscle","Lymphatics","B cell")))
-DimPlot(so.sans.macs)
+DimPlot(so.sans.macs,reduction = "umap1")
 ```
 
 #### Merging the two resulting seurat objects
@@ -91,6 +91,7 @@ CellChatDB.use <- CellChatDB # simply use the default CellChatDB
 
 # set the used database in the object
 cellchat@DB <- CellChatDB.use
+cellchat@DB <- CellChatDB
 ```
 
 ## Performing CellChat analyses
@@ -104,13 +105,13 @@ cellchat <- projectData(cellchat, PPI.mouse)
 ```
 
 ```{r}
-cellchat <- computeCommunProb(cellchat, raw.use = TRUE)
+cellchat <- computeCommunProb(cellchat, raw.use = TRUE,type = "truncatedMean",trim = 0)
 # Filter out the cell-cell communication if there are only few number of cells in certain cell groups
-cellchat <- filterCommunication(cellchat, min.cells = 10)
+#cellchat <- filterCommunication(cellchat, min.cells = 10)
 ```
 
 ```{r}
-cellchat <- computeCommunProbPathway(cellchat)
+cellchat <- computeCommunProbPathway(cellchat,thresh = 2)
 cellchat <- aggregateNet(cellchat)
 groupSize <- as.numeric(table(cellchat@idents))
 ```
@@ -139,9 +140,9 @@ for (i in 1:nrow(mat)) {
 In clust2 vector, change 7 by 8 for the other population. 7 stands for MM MHCII- and 8 for MM MCHII+.
 ```{r}
 filtered_matrix <- matrix(0, nrow = nrow(mat), ncol = ncol(mat), dimnames = dimnames(mat))
-clusts2 <- c(8)#,7)
+clusts2 <- c(9,8)
 for (c in clusts2){
-  filtered_matrix[,c] <- mat[, c]
+  #filtered_matrix[,c] <- mat[, c]
   filtered_matrix[c,] <- mat[c,]
 }
 
@@ -149,6 +150,25 @@ netVisual_circle(filtered_matrix,vertex.weight = groupSize, weight.scale = T, ed
 ```
 
 ```{r}
-netVisual_bubble(cellchat, sources.use = c(7,8),targets.use = c(12), remove.isolate = TRUE,font.size =10)
-netVisual_bubble(cellchat, sources.use = c(12),targets.use = c(7,8), remove.isolate = TRUE,font.size =10)
+wololo3 <- netVisual_bubble(cellchat, sources.use = c(8), remove.isolate = TRUE,font.size =10,return.data = T)
+wololo4 <- netVisual_bubble(cellchat, sources.use = c(9), remove.isolate = TRUE,font.size =10,return.data = T)
+netVisual_bubble(cellchat,targets.use = c(8,9), remove.isolate = TRUE,font.size =10)
 ```
+
+
+
+
+```{r}
+lps_m2pos_vs_m2neg <- setdiff(wololo4$communication$interaction_name_2,wololo3$communication$interaction_name_2)
+lps_m2neg_vs_m2pos <- setdiff(wololo3$communication$interaction_name_2,wololo4$communication$interaction_name_2)
+
+pbs_m2pos_vs_m2neg <- setdiff(wololo2$communication$interaction_name_2,wololo1$communication$interaction_name_2)
+pbs_m2neg_vs_m2pos <- setdiff(wololo1$communication$interaction_name_2,wololo2$communication$interaction_name_2)
+
+m2pos_lps_vs_pbs <- setdiff(wololo4$communication$interaction_name_2,wololo2$communication$interaction_name_2)
+m2pos_pbs_vs_lps <- setdiff(wololo2$communication$interaction_name_2,wololo4$communication$interaction_name_2)
+
+m2neg_lps_vs_pbs <- setdiff(wololo3$communication$interaction_name_2,wololo1$communication$interaction_name_2)
+m2neg_pbs_vs_lps <- setdiff(wololo1$communication$interaction_name_2,wololo3$communication$interaction_name_2)
+```
+
