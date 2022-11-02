@@ -1,0 +1,204 @@
+---
+title: "Monocle on Meningeal Macrophages"
+author: "Matei Teleman"
+date: "21/07/2022"
+output: html_document
+---
+
+## Import libraries
+```{r}
+library(monocle3)
+library(Seurat)
+library(SeuratData)
+#library(SeuratWrappers)
+library(ggplot2)
+library(patchwork)
+library(magrittr)
+library(tidyverse)
+```
+
+
+## Preparing for the data for the Monocle analyses
+### Importation of .RDS file of meningeal dataset after QC and demultiplexing and subsetting macrophage clusters
+```{r}
+s_o <- readRDS("/mnt/DOSI/PLATEFORMES/BIOINFORMATIQUE/03_WORKSPACE/teleman/ciml-rrlab/Project/TotalMeningeLPS/202010028_R333_RR/01_Input/Seurat objects/TotalMeningeLPS_202010028_R333_RR_sc10x.rna.seurat_50PCA.RDS")
+DimPlot(s_o,reduction = "umap1", label = T)
+#s_o <- FindNeighbors(s_o, dims = 1:50)
+s_o <- FindClusters(s_o, resolution = 1,method = 1)
+DimPlot(s_o,reduction = "umap1", label = T)
+FeaturePlot(s_o,reduction = "umap1",features = "C1qa" )
+```
+
+
+```{r}
+sbmacs <- subset(s_o, idents = c("7","11"))
+DimPlot(sbmacs, reduction = "umap1")
+DimPlot(sbmacs, reduction = "umap1",group.by = "MULTI_Sample")
+FeaturePlot(sbmacs,"C1qa",reduction = "umap1")
+```
+
+```{r}
+sbmacs <- SetIdent(sbmacs, value = sbmacs[["MULTI_Sample"]])
+DimPlot(sbmacs,reduction = "umap1")
+sbmacs <- FindNeighbors(sbmacs, dims = 1:50)
+
+```
+
+```{r}
+sbmacs <- FindClusters(sbmacs, resolution = 0.3,method = 1)
+DimPlot(sbmacs,reduction = "umap1")
+DimPlot(sbmacs,reduction = "umap1",group.by = "MULTI_Sample")
+VlnPlot(sbmacs,"H2-Ab1")
+FeaturePlot(sbmacs,reduction = "umap1",features = "H2-Ab1")
+VlnPlot(sbmacs,"H2-Ab1",split.by = "MULTI_Sample")
+```
+
+
+### Removing manually outlier cells (clustered as macrophages but beeing distant from them)
+```{r}
+
+plot <- DimPlot(object = sbmacs,reduction = "umap1")
+# Follow instructions in the terminal to select points
+cells.located <- CellSelector(plot = plot)
+cells.located
+# Automatically set the identity class of selected cells and return a new Seurat object
+sbmacs2 <- subset(sbmacs)
+sbmacs2 <- CellSelector(plot = plot, object = sbmacs2, ident = 'SelectedCells')
+
+
+sbmacs3 <- subset(sbmacs2,idents = "SelectedCells")
+DimPlot(sbmacs3,reduction = "umap1")
+```
+
+
+### Subsetting to have MM 2- PBS with MM 2- & 2+ LPS
+```{r}
+sbmacs4 <- SetIdent(sbmacs3,value = sbmacs3[["RNA_snn_res.0.3"]])
+sb2neg <- subset(sbmacs4, ident = c("0","2","3"))
+DimPlot(sb2neg,reduction = "umap1")
+```
+```{r}
+sb2neg <- ScaleData(sb2neg,do.center = F)
+sb2neg <- NormalizeData(sb2neg)
+sb2neg <- FindVariableFeatures(sb2neg,selection.method = "mvp")
+sb2neg <- RunPCA(sb2neg)
+ElbowPlot(sb2neg,50)
+for (i in 2:50){
+  sb2neg2 <- RunUMAP(sb2neg,dims = 1:i)
+  print(DimPlot(sb2neg2))}
+```
+```{r}
+sb2neg2 <- RunUMAP(sb2neg,dims = 1:14,reduction.name = "umap.tr")
+DimPlot(sb2neg2,reduction = "umap.tr")
+```
+
+### Subsetting to have MM 2+ PBS with MM 2- & 2+ LPS
+```{r}
+sb2pos <- subset(sbmacs4, ident = c("1","2","3"))
+DimPlot(sb2pos,reduction = "umap1")
+```
+```{r}
+sb2pos <- ScaleData(sb2pos,do.center = F)
+sb2pos <- NormalizeData(sb2pos)
+sb2pos <- FindVariableFeatures(sb2pos,selection.method = "mvp")
+sb2pos <- RunPCA(sb2pos)
+ElbowPlot(sb2pos,50)
+for (i in 2:50){
+  sb2pos2 <- RunUMAP(sb2pos,dims = 1:i)
+  print(DimPlot(sb2pos2))}
+```
+
+```{r}
+sb2pos2 <- RunUMAP(sb2pos,dims = 1:20,reduction.name = "umap.tr")
+DimPlot(sb2pos2,reduction = "umap.tr")
+```
+
+
+## Monocle3 analyses
+
+### NEG
+```{r}
+genes <- rownames(sb2neg2@assays$RNA@data)
+gene_annotation <- as.data.frame(genes)
+```
+
+```{r}
+rownames(gene_annotation) <- genes
+colnames(gene_annotation) <- 'gene_short_name'
+```
+
+
+```{r}
+cds <- new_cell_data_set( sb2neg2@assays$RNA@data,
+cell_metadata = sb2neg2@meta.data, gene_metadata = gene_annotation)
+```
+
+
+```{r}
+partition <- c(rep(1, length(cds@colData@rownames)))
+names(partition) <- cds@colData@rownames
+partition <- as.factor(partition)
+cds@clusters@listData[["UMAP"]][["partitions"]] <- partition
+```
+
+```{r}
+seurat_clusters <- sb2neg2@meta.data$RNA_snn_res.0.3
+names(seurat_clusters) <- sb2neg2@assays[["RNA"]]@data@Dimnames[[2]]
+cds@clusters@listData[["UMAP"]][["clusters"]] <- seurat_clusters
+cds@int_colData@listData$reducedDims@listData[["UMAP"]] <- sb2neg2@reductions[["umap.tr"]]@cell.embeddings
+```
+
+```{r}
+cds <- learn_graph(cds, use_partition = F, learn_graph_control = list(minimal_branch_len = 20))
+plot_cells(cds, color_cells_by = 'cluster', label_groups_by_cluster=TRUE, label_leaves=FALSE, label_branch_points=FALSE, graph_label_size=0,cell_size = 1.5,group_label_size = 9,label_cell_groups = my_color_palette[c(1,3,4)],)
+```
+
+```{r}
+cds <- order_cells(cds, reduction_method = "UMAP")
+plot_cells(cds, x=1, y=2, reduction_method = "UMAP", cell_size = 0.95, color_cells_by = "pseudotime", label_cell_groups=F,
+label_leaves=FALSE, label_branch_points=FALSE, graph_label_size=4, trajectory_graph_color = "green", trajectory_graph_segment_size = 1.05, label_roots = FALSE,group_label_size = 9,)
+```
+
+
+### POS
+```{r}
+genes <- rownames(sb2pos2@assays$RNA@data)
+gene_annotation <- as.data.frame(genes)
+```
+
+```{r}
+rownames(gene_annotation) <- genes
+colnames(gene_annotation) <- 'gene_short_name'
+```
+
+
+```{r}
+cds <- new_cell_data_set( sb2pos2@assays$RNA@data,
+cell_metadata = sb2pos2@meta.data, gene_metadata = gene_annotation)
+```
+
+
+```{r}
+partition <- c(rep(1, length(cds@colData@rownames)))
+names(partition) <- cds@colData@rownames
+partition <- as.factor(partition)
+cds@clusters@listData[["UMAP"]][["partitions"]] <- partition
+```
+
+```{r}
+seurat_clusters <- sb2pos2@meta.data$RNA_snn_res.0.3
+names(seurat_clusters) <- sb2pos2@assays[["RNA"]]@data@Dimnames[[2]]
+cds@clusters@listData[["UMAP"]][["clusters"]] <- seurat_clusters
+cds@int_colData@listData$reducedDims@listData[["UMAP"]] <- sb2pos2@reductions[["umap.tr"]]@cell.embeddings
+```
+
+```{r}
+cds <- learn_graph(cds, use_partition = F, learn_graph_control = list(minimal_branch_len = 20))
+plot_cells(cds, color_cells_by = 'cluster', label_groups_by_cluster=TRUE, label_leaves=FALSE, label_branch_points=FALSE, graph_label_size=4,cell_size = 1.5,group_label_size = 9)
+```
+
+```{r}
+cds <- order_cells(cds, reduction_method = "UMAP")
+plot_cells(cds, x=1, y=2, reduction_method = "UMAP", cell_size = 0.95, color_cells_by = "pseudotime", label_cell_groups=T,
+label_leaves=FALSE, label_branch_points=FALSE, graph_label_size=4, trajectory_graph_color = "green", trajectory_graph_segment_size = 1.05, label_roots = FALSE,group_label_size = 9)
+```
