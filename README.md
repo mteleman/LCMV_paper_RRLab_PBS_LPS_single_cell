@@ -43,6 +43,11 @@ DOI : https://doi.org/10.1016/j.immuni.2022.10.005
 This github project contains the instructions and material to reproduce the analysis reported in the article (and more).
 Source code (scripts and dockerfiles) are available in the github repository. Required data and builded Docker/Singularity images are available on download. Instructions to reproduce the analysis are provided below.
 
+Data is available at :
+[![DOI](https://zenodo.org/badge/424171562.svg)](https://zenodo.org/badge/latestdoi/424171562)
+
+
+
 
 ---
 ---
